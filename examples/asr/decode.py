@@ -29,7 +29,7 @@ from results_utils import save_results
 from torch.utils.data import DataLoader
 
 from auden.auto.auto_model import AutoModel
-from auden.utils.checkpoint import get_averaged_model_from_trainer_checkpoints
+from auden.utils.checkpoint import generate_model_checkpoint_from_trainer_checkpoints
 from auden.utils.text_normalization import text_normalization
 
 
@@ -107,26 +107,22 @@ def main(cfg: DictConfig):
         avg = ckpt_cfg.get("avg", 0)
         iters = ckpt_cfg.get("iter", 0)
         epoch = ckpt_cfg.get("epoch", 0)
-        if avg > 0:
-            if iters > 0:
-                model_name = f"averaged-iter-{iters}-avg-{avg}.pt"
-            elif epoch > 0:
-                model_name = f"averaged-epoch-{epoch}-avg-{avg}.pt"
-            else:
-                raise ValueError(
-                    "When averaging, set either checkpoint.iter or checkpoint.epoch"
-                )
-            get_averaged_model_from_trainer_checkpoints(
+        if iters > 0:
+            model_name = f"averaged-iter-{iters}-avg-{avg}.pt"
+        elif epoch > 0:
+            model_name = f"averaged-epoch-{epoch}-avg-{avg}.pt"
+        else:
+            raise ValueError(
+                "When averaging, set either checkpoint.iter or checkpoint.epoch"
+            )
+        checkpoint_path = os.path.join(cfg.exp_dir, model_name)
+        if not os.path.exists(checkpoint_path):
+            generate_model_checkpoint_from_trainer_checkpoints(
                 model_dir=cfg.exp_dir,
                 epochs=epoch or None,
                 iters=iters or None,
                 avg=avg,
                 model_name=model_name,
-            )
-            checkpoint_path = os.path.join(cfg.exp_dir, model_name)
-        else:
-            raise ValueError(
-                "Provide checkpoint.filename (model .pt) or averaging options (iter/epoch + avg)."
             )
 
     model = AutoModel.from_pretrained(checkpoint_path)

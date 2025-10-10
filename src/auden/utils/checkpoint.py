@@ -17,8 +17,9 @@ Key functions adapted from Icefall:
 - average_checkpoints_with_averaged_model
 - make_averaged_model_state_dict, find_checkpoints
 
-The user-facing functions get_model_from_trainer_checkpoint and
-get_averaged_model_from_trainer_checkpoints are Auden-specific additions.
+The user-facing function generate_model_checkpoint_from_trainer_checkpoints is an
+Auden-specific addition that creates a deployable model checkpoint from one or
+more trainer checkpoints.
 """
 
 import glob
@@ -243,6 +244,24 @@ def update_averaged_model(
 
     cur = model_cur.state_dict()
     avg = model_avg.state_dict()
+
+    # Respect exclude_from_checkpoint on either model: skip averaging those keys
+    exclude_keys = set()
+    for m in (model_cur, model_avg):
+        ex = getattr(m, "exclude_from_checkpoint", None)
+        if isinstance(ex, list):
+            exclude_keys.update(ex)
+
+    def _allowed(k: str) -> bool:
+        # Skip if matches any excluded prefix or exact key
+        for ign in exclude_keys:
+            if k == ign or k.startswith(ign + "."):
+                return False
+        return True
+
+    if exclude_keys:
+        cur = {k: v for k, v in cur.items() if _allowed(k)}
+        avg = {k: v for k, v in avg.items() if _allowed(k)}
 
     average_state_dict(
         state_dict_1=avg,
@@ -481,69 +500,7 @@ def freeze_modules(model: nn.Module, frozen_modules: list[str]):
             param.requires_grad = False
 
 
-def get_model_from_trainer_checkpoint(
-    model_dir: Union[str, Path],
-    trainer_checkpoint_path: Union[str, Path],
-    model_type: str = "model_avg",
-    model_name: str = "final_model.pt",
-) -> None:
-    """
-    Extract a model from a trainer checkpoint and save it as a model checkpoint.
-
-    This function extracts the model state dict from a trainer checkpoint and saves it
-    to model_dir/model_name.pt.
-
-    Args:
-        model_dir: Directory to save the model checkpoint.
-        trainer_checkpoint_path: Path to the trainer checkpoint file.
-        model_type: Which model to extract ("model" or "model_avg").
-        model_name: Name for the saved model file (should be xxx.pt).
-
-    Example:
-        ```python
-        # Extract averaged model from trainer checkpoint
-        get_model_from_trainer_checkpoint(
-            model_dir="./models/",
-            trainer_checkpoint_path="checkpoint-1000.pt",
-            model_type="model_avg",
-            model_name="final_model.pt"
-        )
-        ```
-    """
-    model_dir = Path(model_dir)
-    trainer_checkpoint_path = Path(trainer_checkpoint_path)
-    model_dir.mkdir(parents=True, exist_ok=True)
-
-    logging.info(
-        f"Extracting {model_type} from trainer checkpoint: {trainer_checkpoint_path}"
-    )
-
-    # Load checkpoint
-    checkpoint = torch.load(trainer_checkpoint_path, map_location="cpu")
-
-    # Validate model_type
-    if model_type not in ["model", "model_avg"]:
-        raise ValueError(
-            f"model_type must be 'model' or 'model_avg', got '{model_type}'"
-        )
-
-    # Check if requested model exists in checkpoint
-    if model_type not in checkpoint:
-        available = list(checkpoint.keys())
-        raise ValueError(
-            f"Model type '{model_type}' not found in checkpoint. Available: {available}"
-        )
-
-    model_state_dict = checkpoint[model_type]
-
-    # Save model state dict directly to model_dir/model_name.pt
-    model_path = model_dir / model_name
-    torch.save(model_state_dict, model_path)
-
-    logging.info(f"Successfully saved {model_type} to: {model_path}")
-
-
-def get_averaged_model_from_trainer_checkpoints(
+def generate_model_checkpoint_from_trainer_checkpoints(
     model_dir: Union[str, Path],
     epochs: Optional[int] = None,
     iters: Optional[int] = None,
@@ -551,49 +508,79 @@ def get_averaged_model_from_trainer_checkpoints(
     model_name: str = "averaged_model.pt",
 ) -> None:
     """
-    Get an averaged model from trainer checkpoints and save it as a model checkpoint.
+    Generate a model checkpoint from one or more trainer checkpoints.
 
-    This function averages multiple trainer checkpoints using Icefall logic and saves
-    the result to model_dir/model_name.pt.
+    Behavior:
+    - If `avg` > 0: average multiple trainer checkpoints (epoch or iter mode)
+      and save the averaged model weights to model_dir/model_name.
+    - Else (avg == 0): locate a single trainer checkpoint (by iters/epochs or latest)
+      and extract; prefer 'model_avg' if present, else 'model'.
 
     Args:
-        model_dir: Directory containing trainer checkpoints and where to save the averaged model.
-        epochs: Epoch number (if provided, uses epoch-based averaging).
-        iters: Iteration number (if provided, uses iteration-based averaging).
-        avg: Number of checkpoints to average.
-        model_name: Name for the saved model file (should be xxx.pt).
+        model_dir: Directory containing trainer checkpoints and where to save the output model.
+        epochs: Epoch number for single-pick (avg==0) or for epoch-based averaging (avg>0).
+        iters: Iteration number for single-pick (avg==0) or for iter-based averaging (avg>0).
+        avg: Number of checkpoints to average; if 0, no averaging (single extraction).
+        model_name: Output filename for the saved model (e.g., 'averaged_model.pt').
 
-    Example:
-        ```python
-        # Average last 5 checkpoints from iteration 1000
-        get_averaged_model_from_trainer_checkpoints(
-            model_dir="./exp_dir/",
-            iters=1000,
-            avg=5,
-            model_name="final_model.pt"
-        )
+    Examples:
+        Average last 5 checkpoints from iteration 1000:
+            >>> generate_model_checkpoint_from_trainer_checkpoints(
+            ...     model_dir="./exp_dir/", iters=1000, avg=5, model_name="final_model.pt"
+            ... )
 
-        # Average last 3 epochs
-        get_averaged_model_from_trainer_checkpoints(
-            model_dir="./exp_dir/",
-            epochs=10,
-            avg=3,
-            model_name="epoch_avg_model.pt"
-        )
-        ```
+        Extract from a single trainer checkpoint without averaging:
+            >>> generate_model_checkpoint_from_trainer_checkpoints(
+            ...     model_dir="./exp_dir/", iters=1000, avg=0, model_name="final_model.pt"
+            ... )
     """
     model_dir = Path(model_dir)
     model_dir.mkdir(parents=True, exist_ok=True)
 
-    logging.info(f"Getting averaged model from trainer checkpoints in {model_dir}")
+    # Case 1: averaging requested
+    if avg and avg > 0:
+        logging.info(f"Averaging {avg} trainer checkpoints in {model_dir}")
+        state_dict = make_averaged_model_state_dict(
+            exp_dir=model_dir, iter=iters or 0, epoch=epochs or 0, avg=avg
+        )
+    # Case 2: single extraction by iters/epochs/latest
+    else:
+        # No averaging: pick a single trainer checkpoint and extract 'model' or 'model_avg'
+        logging.info("avg==0; extracting model from a single trainer checkpoint")
+        ckpt_path: Optional[Path] = None
+        if iters and iters > 0:
+            # Prefer checkpoint-<iters>.pt if present; else pick the nearest >= iters
+            candidate = model_dir / f"checkpoint-{iters}.pt"
+            if candidate.exists():
+                ckpt_path = candidate
+            else:
+                ckpts = find_checkpoints(model_dir, iteration=iters)
+                ckpt_path = Path(ckpts[0]) if ckpts else None
+        elif epochs and epochs > 0:
+            candidate = model_dir / f"epoch-{epochs}.pt"
+            ckpt_path = candidate if candidate.exists() else None
+        else:
+            # Fallback: pick the latest checkpoint
+            ckpts = find_checkpoints(model_dir)
+            ckpt_path = Path(ckpts[0]) if ckpts else None
 
-    # Use the legacy make_averaged_model_state_dict function
-    averaged_state_dict = make_averaged_model_state_dict(
-        exp_dir=model_dir, iter=iters or 0, epoch=epochs or 0, avg=avg
-    )
+        if ckpt_path is None or not ckpt_path.exists():
+            raise ValueError("No trainer checkpoint found to extract model from.")
 
-    # Save averaged model state dict directly to model_dir/model_name.pt
+        logging.info(f"Extracting model from {ckpt_path}")
+        ckpt = torch.load(ckpt_path, map_location="cpu")
+        if "model_avg" in ckpt and isinstance(ckpt["model_avg"], dict):
+            state_dict = ckpt["model_avg"]
+        elif "model" in ckpt and isinstance(ckpt["model"], dict):
+            state_dict = ckpt["model"]
+        else:
+            available = list(ckpt.keys())
+            raise ValueError(
+                f"Trainer checkpoint missing 'model'/'model_avg'. Keys: {available}"
+            )
+
+    # Save model state dict directly to model_dir/model_name.pt
     model_path = model_dir / model_name
-    torch.save(averaged_state_dict, model_path)
+    torch.save(state_dict, model_path)
 
-    logging.info(f"Successfully saved averaged model to: {model_path}")
+    logging.info(f"Successfully saved model to: {model_path}")
