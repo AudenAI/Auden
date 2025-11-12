@@ -22,7 +22,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, TextIO, Tuple, Union
 
-import k2
+try:
+    import k2
+except Exception as e:
+    raise ImportError(
+        "k2 is required for RNNT decoding utilities. "
+        "Install via conda: `conda install -c k2-fsa k2` (ensure PyTorch/CUDA match), "
+        "or see https://k2-fsa.github.io/k2/."
+    ) from e
 import kaldialign
 import torch
 from torch import nn

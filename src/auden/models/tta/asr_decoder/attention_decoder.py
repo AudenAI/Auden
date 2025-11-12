@@ -3,7 +3,14 @@ from __future__ import annotations
 import math
 from typing import Dict, List, Optional
 
-import k2
+try:
+    import k2
+except Exception as e:
+    raise ImportError(
+        "k2 is required for RaggedTensor utilities used by attention decoder IO. "
+        "Install via conda: `conda install -c k2-fsa k2` (ensure PyTorch/CUDA match), "
+        "or see https://k2-fsa.github.io/k2/."
+    ) from e
 import torch
 import torch.nn as nn
 

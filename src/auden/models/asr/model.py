@@ -3,7 +3,14 @@ import os
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-import k2
+try:
+    import k2
+except Exception as e:
+    raise ImportError(
+        "k2 is required for RNNT/Transducer training and decoding. "
+        "Install via conda: `conda install -c k2-fsa k2` (ensure PyTorch/CUDA match), "
+        "or see https://k2-fsa.github.io/k2/ for install options."
+    ) from e
 import torch
 import torch.nn as nn
 
@@ -209,7 +216,7 @@ class AsrModel(nn.Module):
         lm = self.simple_lm_proj(decoder_out)
         am = self.simple_am_proj(encoder_out)
 
-        with torch.cuda.amp.autocast(enabled=False):
+        with torch.amp.autocast("cuda", enabled=False):
             simple_loss, (px_grad, py_grad) = k2.rnnt_loss_smoothed(
                 lm=lm.float(),
                 am=am.float(),
@@ -244,7 +251,7 @@ class AsrModel(nn.Module):
         # prior to do_rnnt_pruning (this is an optimization for speed).
         logits = self.joiner(am_pruned, lm_pruned, project_input=False)
 
-        with torch.cuda.amp.autocast(enabled=False):
+        with torch.amp.autocast("cuda", enabled=False):
             pruned_loss = k2.rnnt_loss_pruned(
                 logits=logits.float(),
                 symbols=y_padded,

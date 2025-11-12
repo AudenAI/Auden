@@ -1,7 +1,7 @@
 """
 Auden Data Module
 
-This module provides data loading and processing functionality for audio understanding tasks.
+This module provides data loading and processing functionality for audio & multimodal understanding tasks.
 It includes base classes for creating task-specific datamodules with Lhotse integration.
 
 Main Components:

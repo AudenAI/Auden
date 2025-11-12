@@ -5,7 +5,6 @@ from pathlib import Path
 
 import torch
 import torch.nn as nn
-from torch.cuda.amp import GradScaler
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.tensorboard import SummaryWriter
 
@@ -102,7 +101,7 @@ class BaseTrainer(ABC):
         self.model, self.model_avg = self.setup_model(model)
 
         # optimizer and scheduler
-        self.scaler = GradScaler(enabled=self.use_fp16)
+        self.scaler = torch.amp.GradScaler("cuda", enabled=self.use_fp16)
         self.optimizer = self.build_optimizer(self.model)
         self.scheduler = self.build_scheduler(self.optimizer)
 
@@ -664,7 +663,7 @@ class BaseTrainer(ABC):
             This method uses automatic mixed precision when self.use_fp16 is True.
             The gradient scaler is used to prevent gradient underflow in FP16 training.
         """
-        with torch.cuda.amp.autocast(enabled=self.use_fp16):
+        with torch.amp.autocast("cuda", enabled=self.use_fp16):
             loss, batch_metrics = self._forward_one_batch(batch=batch, is_training=True)
 
         # Backprop and optimization step

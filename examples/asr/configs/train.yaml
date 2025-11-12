@@ -10,7 +10,9 @@ model:
   # Provide either a path/HF repo to a directory with config.json for the encoder,
   # or rely on model code defaults (ZipformerConfig()). If you need to override,
   # pass encoder_config via script.
-  encoder: zipformer
+  encoder: 
+    model_type: zipformer
+    pretrained_model: null
 
 trainer:
   optimizer: 

@@ -127,7 +127,7 @@ class AutoTokenizer:
     """
     Factory class for automatically loading audio tokenizers based on configuration.
 
-    Supports various tokenization methods for audio understanding tasks.
+    Supports various tokenization methods for audio & multimodal understanding tasks.
     """
 
     @classmethod

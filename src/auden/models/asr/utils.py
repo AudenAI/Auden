@@ -1,4 +1,11 @@
-import k2
+try:
+    import k2
+except Exception as e:
+    raise ImportError(
+        "k2 is required for RaggedTensor operations in ASR utilities. "
+        "Install via conda: `conda install -c k2-fsa k2` (ensure PyTorch/CUDA match), "
+        "or see https://k2-fsa.github.io/k2/."
+    ) from e
 import torch
 
 

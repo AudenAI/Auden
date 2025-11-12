@@ -11,21 +11,54 @@ def construct_feature_extractor(
     num_mel_bins: int = 80,
     device: str | torch.device = "cpu",
 ):
+    # Prefer kaldifeat if available; otherwise fall back to Lhotse Fbank.
     try:
         import kaldifeat  # type: ignore
-    except Exception as e:
-        raise ImportError(
-            "kaldifeat is required for feature extraction. Install with `pip install kaldifeat`."
-        ) from e
 
-    opts = kaldifeat.FbankOptions()
-    opts.device = torch.device(device)
-    opts.frame_opts.dither = 0
-    opts.frame_opts.snip_edges = False
-    opts.frame_opts.samp_freq = sample_rate
-    opts.mel_opts.num_bins = num_mel_bins
-    opts.mel_opts.high_freq = -400
-    return kaldifeat.Fbank(opts)
+        opts = kaldifeat.FbankOptions()
+        opts.device = torch.device(device)
+        opts.frame_opts.dither = 0
+        opts.frame_opts.snip_edges = False
+        opts.frame_opts.samp_freq = sample_rate
+        opts.mel_opts.num_bins = num_mel_bins
+        opts.mel_opts.high_freq = -400
+        return kaldifeat.Fbank(opts)
+    except Exception:
+        # Fallback: Lhotse Fbank (pure PyTorch), returns a callable compatible with our usage.
+        try:
+            from lhotse.features import Fbank, FbankConfig  # type: ignore
+        except Exception as e_lhotse:
+            raise ImportError(
+                "Feature extraction requires either 'kaldifeat' or 'lhotse'. "
+                "Please install one of them, e.g.: pip install kaldifeat OR pip install lhotse"
+            ) from e_lhotse
+
+        cfg = FbankConfig(
+            sampling_rate=sample_rate,
+            num_mel_bins=num_mel_bins,
+            dither=0.0,
+            snip_edges=False,
+        )
+        fbank = Fbank(cfg)
+
+        def _lhotse_extractor(wavs: list[torch.Tensor]) -> list[torch.Tensor]:
+            import numpy as np  # local import to avoid hard dependency at module import time
+
+            feats: list[torch.Tensor] = []
+            for w in wavs:
+                # Expect 1D mono waveform tensor
+                x = w.detach().cpu()
+                if x.ndim != 1:
+                    raise ValueError(
+                        f"Expected 1D mono waveform, got shape {tuple(x.shape)}"
+                    )
+                np_feat = fbank.extract(
+                    x.numpy(), sampling_rate=sample_rate
+                )  # (T, F) numpy
+                feats.append(torch.from_numpy(np.asarray(np_feat)).to(torch.float32))
+            return feats
+
+        return _lhotse_extractor
 
 
 def _read_wavs_from_paths(paths: List[str], target_sample_rate: int):

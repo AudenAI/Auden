@@ -1,13 +1,13 @@
 """
 Auden Models Module
 
-This module provides model implementations for audio understanding tasks.
+This module provides model implementations for audio & multimodal understanding tasks.
 It includes both general-purpose core models and task-specific example models.
 
 Structure:
     - base/: Base classes for model configuration and implementation
     - core/: General-purpose models (zipformer, transformer, conformer, etc.)
-    - examples/: Task-specific models (ASR, audio caption, speaker verification, etc.)
+    - examples/: Task-specific models (ASR, audio caption, speaker verification, speech-LLM, etc.)
 
 Example:
     ```python

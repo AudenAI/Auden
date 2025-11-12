@@ -1,23 +1,31 @@
-# Auden: Audio Understanding Toolkit
+# Auden: Audio & Multimodal Understanding Research Toolbox
 
-A comprehensive toolkit for audio understanding tasks including ASR, CLAP, audio captioning, speaker identification, speech-llm and more.
+A comprehensive toolbox for audio & multimodal understanding tasks including ASR, CLAP, audio captioning, speaker identification, speech-llm and more.
 
 ## Quick Start
 
+Before installing Auden:
+- Install PyTorch and Torchaudio following the official instructions: https://pytorch.org/get-started/locally/
+- If you plan to use Zipformer/ASR/TTA, install a k2 wheel matching your PyTorch and CUDA versions. For example (torch==2.7.1, CUDA 11.8): `pip install k2==1.24.4.dev20250714+cuda11.8.torch2.7.1 -f https://k2-fsa.github.io/k2/cuda.html`. See the [k2 CUDA wheel matrix](https://k2-fsa.github.io/k2/cuda.html) and the [k2 installation guide](https://k2-fsa.github.io/k2/).
+
 ```bash
-pip install auden
+git clone https://github.com/AudenAI/Auden.git
+cd Auden
+pip install -e .
 ```
+Some [examples/](examples/) may have extra installation requirements. Please refer to the [examples/](examples/) READMEs for details.
 
 ## Features
 
-- 🎯 Multiple audio tasks: ASR, captioning, constrative learning, audio classification, speaker identification etc.
-- 🚀 Pre-trained models and easy fine-tuning
+- 🎯 Multiple foundation audio tasks: ASR, captioning, contrastive learning, audio classification, speaker identification etc.
+- 🤖 Multimodal LLM support (e.g. speech-LLM, asr-llm)
+- 🚀 Pre-trained models&encoders with huggingface support and easy fine-tuning
 - 🔧 Modular design for custom workflows
 - 📊 Comprehensive evaluation metrics
 
 ## Usage
 
-### Available Model Types
+### Available Built-in Model Types from `AutoModel`
 
 ```python
 from auden.auto import list_available_models
@@ -26,7 +34,7 @@ print(list_available_models())
 
 ### Custom Model Registration
 
-**Important**: Before using custom models with `AutoModel`, you must register them first:
+**Important**: If you want to load custom models with `AutoModel`, you must register them first:
 
 ```python
 from auden.auto import register_model, register_config
@@ -40,7 +48,7 @@ from auden.auto import AutoModel
 model = AutoModel.from_pretrained("path/to/my-model")
 ```
 
-**Note**: Built-in model types (listed above) are pre-registered and ready to use.
+**Note**: If you don't want to use `AutoModel`, you can always skip this step and use your own way to load.
 
 ### Loading Models
 
@@ -92,7 +100,7 @@ tokenizer = AutoTokenizer.from_pretrained("path/to/tokenizer")
 Check [examples/](examples/) for task-specific tutorials.
 
 ## License
-The code and weights in this repository is released in the [LICENSE](LICENSE) file.
+The code and weights in this repository are released under the [LICENSE](LICENSE) file.
 This repository also includes a [NOTICE](NOTICE) file with third-party attributions (e.g., Transformers, Icefall).
 
 ## Acknowledgements

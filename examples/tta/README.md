@@ -32,6 +32,11 @@ python evaluate.py \
   data.test_data_config=configs/test_data_config.yaml
 ```
 
+Note: For translation BLEU evaluation, please install sacrebleu:
+```bash
+pip install sacrebleu
+```
+
 ## 🔥 Release of TTA-m10
 ### Training Data: 358k hours of public and in-house ASR/ST data
 <p>
