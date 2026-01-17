@@ -96,8 +96,8 @@ class AsrModel(nn.Module):
         self.blank_id = self.tokenizer.pad_token_id
         self.vocab_size = len(self.tokenizer)
         logging.info(f"Vocab size: {self.vocab_size}")
-        self.encoder_out_dim = max(config.encoder_config.encoder_dim)
         self.encoder = AutoModel.from_config(self.config.encoder_config)
+        self.encoder_out_dim = self.encoder.encoder_out_dim
         # Initialize decoder
         if config.use_transducer:
             self.decoder = Decoder(

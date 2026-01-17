@@ -18,7 +18,14 @@ from pathlib import Path
 import hydra
 import torch
 import yaml
-from lhotse import CutSet, Fbank, FbankConfig, set_audio_duration_mismatch_tolerance
+from lhotse import (
+    CutSet,
+    Fbank,
+    FbankConfig,
+    WhisperFbank,
+    WhisperFbankConfig,
+    set_audio_duration_mismatch_tolerance,
+)
 from lhotse.dataset import (
     DynamicBucketingSampler,
     K2SpeechRecognitionDataset,
@@ -55,10 +62,28 @@ def get_test_dataloaders(cfg):
         logging.info(f"Getting {test_set['manifest']} cuts")
         cutset = CutSet.from_file(test_set["manifest"]).resample(16000)
         test_name = test_set["name"]
+        if cfg.data.feature == "fbank":
+            input_strategy = OnTheFlyFeatures(Fbank(FbankConfig(num_mel_bins=80)))
+        elif cfg.data.feature == "whisper_fbank":
+            input_strategy = OnTheFlyFeatures(
+                WhisperFbank(WhisperFbankConfig(num_filters=80))
+            )
+        elif cfg.data.feature == "whisper_v3_fbank":
+            input_strategy = OnTheFlyFeatures(
+                WhisperFbank(WhisperFbankConfig(num_filters=128))
+            )
+        else:
+            raise ValueError(f"Unsupported feature type: {cfg.data.feature}")
         testset = K2SpeechRecognitionDataset(
-            input_strategy=OnTheFlyFeatures(Fbank(FbankConfig(num_mel_bins=80))),
+            input_strategy=input_strategy,
             return_cuts=True,
         )
+        if test_set.get("encoder_input_strategy", None):
+            input_strategy = test_set["encoder_input_strategy"]
+            testset = K2SpeechRecognitionDataset(
+                input_strategy=input_strategy,
+                return_cuts=True,
+            )
         sampler = DynamicBucketingSampler(
             cutset,
             max_duration=cfg.data.max_duration,
@@ -136,6 +161,8 @@ def main(cfg: DictConfig):
 
     # result dir
     res_dir = Path(cfg.exp_dir) / "greedy_search"
+    if not os.path.exists(res_dir):
+        os.makedirs(res_dir)
     results_file_suffix = Path(checkpoint_path).stem
 
     for test_set_name, test_dl in zip(test_sets, test_dls):

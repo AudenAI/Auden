@@ -120,7 +120,12 @@ class BaseLhotseDatamodule(ABC):
                 self.input_strategy = OnTheFlyFeatures(
                     WhisperFbank(WhisperFbankConfig(num_filters=80))
                 )
-                logging.info("Using Whisper fbank")
+                logging.info("Using Whisper fbank (80 dims)")
+            elif feature_type == "whisper_v3_fbank":
+                self.input_strategy = OnTheFlyFeatures(
+                    WhisperFbank(WhisperFbankConfig(num_filters=128))
+                )
+                logging.info("Using Whisper v3 fbank (128 dims)")
             elif feature_type == "wav":
                 self.input_strategy = AudioSamples()
                 logging.info("Using raw waveform")

@@ -17,6 +17,18 @@ from ..models.base.model_config import BaseConfig
 CONFIG_MAPPING_NAMES: "OrderedDict[str, tuple[str, str]]" = OrderedDict(
     [
         ("zipformer", ("auden.models.zipformer.model_config", "ZipformerConfig")),
+        (
+            "wenet-transformer",
+            ("auden.models.wenet_transformer.model_config", "WenetTransformerConfig"),
+        ),
+        (
+            "whisper-encoder",
+            ("auden.models.whisper_encoder.model_config", "WhisperEncoderConfig"),
+        ),
+        (
+            "whisper",
+            ("auden.models.whisper_encoder.model_config", "WhisperEncoderConfig"),
+        ),
         ("asr", ("auden.models.asr.model_config", "AsrConfig")),
         ("audio-tag", ("auden.models.audio_tag.model_config", "AudioTagConfig")),
         ("clap", ("auden.models.clap.model_config", "ClapConfig")),
@@ -179,16 +191,17 @@ class AutoConfig:
             ValueError: If model_type is missing or unsupported
         """
         # Try to resolve as local path first
+        from_hub = False
         try:
             config_file = cls._resolve_config_path(pretrained_name_or_path)
         except (ValueError, FileNotFoundError):
             # If local path fails, try HuggingFace Hub
             config_file = cls._download_from_hub(pretrained_name_or_path, "config.json")
+            from_hub = True
 
-        # Load and parse config
+        # Peek at model_type to determine config class
         with open(config_file, "r") as f:
             config_dict = json.load(f)
-        config_dict.update(kwargs)
 
         model_type = config_dict.get("model_type", None)
         if model_type is None:
@@ -200,8 +213,21 @@ class AutoConfig:
                 f"Unsupported model_type: '{model_type}'. Supported types: {list(CONFIG_MAPPING.keys())}"
             )
 
+        # Get config class and use its from_pretrained (allows custom loading logic)
         config_cls = CONFIG_MAPPING[model_type]
-        return config_cls(**config_dict)
+
+        # Determine the path to pass to config_cls.from_pretrained
+        if from_hub:
+            # For hub downloads, config_file is in a cached directory
+            config_dir = os.path.dirname(config_file)
+        elif os.path.isdir(pretrained_name_or_path):
+            # User passed a directory
+            config_dir = pretrained_name_or_path
+        else:
+            # User passed a file (.json or .pt), use its directory
+            config_dir = os.path.dirname(config_file)
+
+        return config_cls.from_pretrained(config_dir, **kwargs)
 
     @classmethod
     def for_model(cls, model_type: str, **kwargs) -> BaseConfig:

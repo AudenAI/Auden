@@ -12,7 +12,7 @@ model:
   # pass encoder_config via script.
   encoder: 
     model_type: zipformer
-    pretrained_model: null
+    pretrained_encoder: null
 
 trainer:
   optimizer: 

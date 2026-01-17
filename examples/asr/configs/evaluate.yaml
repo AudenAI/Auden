@@ -18,3 +18,4 @@ data:
   test_data_config:
   max_duration: 1000
   num_workers: 8
+  feature: fbank

@@ -42,8 +42,15 @@ class BaseConfig:
           configs forward-compatible with newer versions.
         """
         for key, value in self.__class__.__dict__.items():
-            if not key.startswith("_") and not callable(value):
-                setattr(self, key, value)
+            # Skip private attributes, callables, and method descriptors
+            if key.startswith("_"):
+                continue
+            if callable(value):
+                continue
+            # Skip classmethod, staticmethod, and other descriptors
+            if isinstance(value, (classmethod, staticmethod, property)):
+                continue
+            setattr(self, key, value)
         for key, value in kwargs.items():
             setattr(self, key, value)
 

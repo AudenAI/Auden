@@ -20,6 +20,15 @@ from .auto_config import AutoConfig
 MODEL_MAPPING_NAMES: "OrderedDict[str, tuple[str, str]]" = OrderedDict(
     [
         ("zipformer", ("auden.models.zipformer.model", "ZipformerEncoderModel")),
+        (
+            "wenet-transformer",
+            ("auden.models.wenet_transformer.model", "WenetTransformerEncoderModel"),
+        ),
+        (
+            "whisper-encoder",
+            ("auden.models.whisper_encoder.model", "WhisperEncoderModel"),
+        ),
+        ("whisper", ("auden.models.whisper_encoder.model", "WhisperEncoderModel")),
         ("asr", ("auden.models.asr.model", "AsrModel")),
         ("audio-tag", ("auden.models.audio_tag.model", "AudioTagModel")),
         ("clap", ("auden.models.clap.model", "ClapModel")),
