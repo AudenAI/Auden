@@ -1,5 +1,9 @@
 # TagSpeech: Unified E2E Multi-Speaker ASR and Diarization Model
 
+[![arXiv](https://img.shields.io/badge/arXiv-2601.06896-b31b1b.svg)](https://arxiv.org/abs/2601.06896)
+[![Model AMI](https://img.shields.io/badge/🤗%20HuggingFace-TagSpeech--AMI-yellow)](https://huggingface.co/AudenAI/TagSpeech-AMI)
+[![Model Alimeeting](https://img.shields.io/badge/🤗%20HuggingFace-TagSpeech--Alimeeting-yellow)](https://huggingface.co/AudenAI/TagSpeech-Alimeeting)
+
 This example presents TagSpeech, a fully end-to-end multi-speaker ASR and diarization framework built on the LALM code of Auden. It takes the raw waveform of multi-speaker conversation and directly outputs a structured output containing timestamps, speaker label, gender, and speaker-attributed ASR transcription. 
 
 <video src="assets/demo.mp4" controls="controls" style="max-width: 100%;">
@@ -31,7 +35,38 @@ pip install meeteval scipy
 - **scipy**: For optimal speaker matchin when using the Hungarian algorithm when calculating gender accuracy (optional)
 
 
-## Quick Start
+## Quick Inference
+
+```python
+import torch
+from model import TagSpeech
+from utils.xml_utils import xml_to_json
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+model = TagSpeech.from_pretrained("AudenAI/TagSpeech-AMI").to(device) # use "AudenAI/TagSpeech-Alimeeting" for Mandarin data
+
+wav_files = ["assets/test_example_AMI_EN2002c-12-0-35.wav"]
+
+audio_token = model.config.audio_token
+messages = [
+    [{"role": "user", "content": f"<text>{audio_token}</text>\n<speaker>{audio_token}</speaker>"}]
+    for _ in wav_files
+]
+
+outputs = model.generate(wav_files, messages, max_new_tokens=800, num_beams=1, do_sample=False)
+
+# Print outputs in XML and JSON formats
+for i, output in enumerate(outputs, 1):
+    print(f"\n{'='*80}\nOutput {i}/{len(outputs)} - XML:\n{'='*80}\n{output}\n{'='*80}")
+    
+    json_output = xml_to_json(output)
+    if json_output:
+        print(f"\nOutput {i}/{len(outputs)} - JSON:\n{'='*80}\n{json_output}\n{'='*80}")
+    else:
+        print(f"\n⚠️  Warning: Output {i} could not be parsed as valid XML\n{'='*80}")
+```
+
+## Train Your Model
 
 ### Step 1: Generate Time Anchor Embeddings
 
@@ -55,7 +90,7 @@ This creates `digit_token_embeddings.pt` which is required for training.
 ./scripts/train_AliMeeting.sh
 ```
 
-### Decoding
+### Step 3: Decoding
 
 ```bash
 # Decode AMI test set
@@ -91,7 +126,7 @@ To download and prepare the datasets, please follow the official Lhotse recipes:
 - **AMI**: [ami.py](https://github.com/lhotse-speech/lhotse/blob/master/lhotse/recipes/ami.py)
 - **AliMeeting**: [ali_meeting.py](https://github.com/lhotse-speech/lhotse/blob/master/lhotse/recipes/ali_meeting.py)
 
-After generating recordings and supervision manifests, we further segment multi-speaker audio using Lhotse's [`MultiCut.trim_to_supervision_groups`](https://lhotse.readthedocs.io/en/latest/api.html#lhotse.cut.MultiCut.trim_to_supervision_groups) function.
+After generating recordings and supervision manifests, we further segment multi-speaker audio using Lhotse's [`MultiCut.trim_to_supervision_groups`](https://lhotse.readthedocs.io/en/latest/api.html#lhotse.cut.MultiCut.trim_to_supervision_groups) function, with max_pause=0.0.
 
 This step groups overlapping speaker turns into a single utterance-level segment while preserving speaker annotations.
 
@@ -167,7 +202,18 @@ During training and inference, each example is converted into an XML-like repres
 <spk id="2" g="f" t="0.96-2.13"/>
 </speaker>
 ```
-You may parse the output into desired formats.
+You may parse the output into desired formats, e.g., JSON.
 
 
 
+## Citation
+If you use TagSpeech in your research, please cite:
+
+```
+@article{huo2026tagspeech,
+  title={TagSpeech: End-to-End Multi-Speaker ASR and Diarization with Fine-Grained Temporal Grounding},
+  author={Huo, Mingyue and Shao, Yiwen and Zhang, Yuheng},
+  journal={arXiv preprint arXiv:2601.06896},
+  year={2026}
+}
+```
