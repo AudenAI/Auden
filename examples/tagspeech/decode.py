@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Multi-speaker ASR-LLM decode script.
+TagSpeech decode script.
 Generate XML outputs for multi-speaker conversations without evaluation.
 """
 
@@ -169,6 +169,14 @@ def register_custom_models():
         config_type="audio-llm-dual-audio-tokens-anchor-num",
         module_path="model_config",
         class_name="AudioLLMDualAudioTokensAnchorNumConfig",
+        exist_ok=True
+    )
+    
+    # Register TagSpeech alias for easier imports
+    register_model(
+        model_type="tagspeech",
+        module_path="model",
+        class_name="TagSpeech",
         exist_ok=True
     )
 

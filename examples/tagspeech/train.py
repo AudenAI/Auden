@@ -128,6 +128,14 @@ def main(cfg: DictConfig):
         exist_ok=True
     )
     
+    # Register TagSpeech alias for easier imports
+    register_model(
+        model_type="tagspeech",
+        module_path="model",
+        class_name="TagSpeech",
+        exist_ok=True
+    )
+    
     logging.info("\n" + OmegaConf.to_yaml(cfg))
 
     # Seed
