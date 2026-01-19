@@ -191,11 +191,11 @@ encoder = AutoModel.from_pretrained("AudenAI/auden-encoder-voice")
 If you use this model in your research, please cite:
 
 ```bibtex
-@article{huo2025auden,
-  title={Auden-Voice: General-Purpose Voice Encoder for Speech and Language Understanding},
-  author={Huo, Mingyue and Tseng, Wei-Cheng and Shao, Yiwen and Zhang, Hao and Yu, Dong},
-  journal={arXiv preprint arXiv:2511.15145},
-  year={2025}
+@inproceedings{huo2026auden,
+  title     = {Auden-Voice: General-Purpose Voice Encoder for Speech and Language Understanding},
+  author    = {Huo, Mingyue and Tseng, Wei-Cheng and Shao, Yiwen and Zhang, Hao and Yu, Dong},
+  booktitle = {Proceedings of the IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP)},
+  year      = {2026}
 }
 ```
 
