@@ -5,8 +5,9 @@ Handles XML format construction and parsing.
 """
 
 import re
+import json
 import xml.etree.ElementTree as ET
-from typing import List
+from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 
 
@@ -216,3 +217,58 @@ def parse_xml_to_segments(xml_text: str) -> List[SpeakerSegment]:
     segments.sort(key=lambda x: x.start_time)
     
     return segments
+
+
+def xml_to_json(xml_text: str, pretty: bool = True) -> Optional[str]:
+    """Convert XML output to JSON format for easier reading.
+    
+    Converts TagSpeech XML format to a structured JSON with segments.
+    Each segment includes: start, end, text, speaker_id, speaker_gender.
+    
+    Args:
+        xml_text: XML string from model output
+        pretty: If True, return formatted JSON with indentation
+        
+    Returns:
+        JSON string if XML is valid, None if parsing failed
+        
+    Example output:
+        {
+          "segments": [
+            {
+              "start": 0.0,
+              "end": 3.14,
+              "text": "Hello world",
+              "speaker_id": "1",
+              "speaker_gender": "male"
+            },
+            ...
+          ]
+        }
+    """
+    # Parse XML to segments
+    segments = parse_xml_to_segments(xml_text)
+    
+    if not segments:
+        # Return empty result if parsing failed
+        return None
+    
+    # Convert segments to JSON-serializable format
+    json_data = {
+        "segments": [
+            {
+                "start": seg.start_time,
+                "end": seg.end_time,
+                "text": seg.text,
+                "speaker_id": seg.speaker_id,
+                "speaker_gender": seg.gender,
+            }
+            for seg in segments
+        ]
+    }
+    
+    # Convert to JSON string
+    if pretty:
+        return json.dumps(json_data, indent=2, ensure_ascii=False)
+    else:
+        return json.dumps(json_data, ensure_ascii=False)
