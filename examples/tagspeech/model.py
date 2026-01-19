@@ -477,6 +477,10 @@ class AudioLLMDualAudioTokensModel(LalmModel):
             else:
                 x, x_lens = self.audio_encoder.extract_feature(input)
             
+            # Ensure features are on the same device as LLM
+            x = x.to(self.llm.device)
+            x_lens = x_lens.to(self.llm.device)
+            
             # Get dual audio features
             semantic_features, voice_features, semantic_lens, voice_lens = self.forward_audio_features(x, x_lens)
             # Pack as tuple for preprocessing
@@ -513,10 +517,16 @@ class AudioLLMDualAudioTokensModel(LalmModel):
     def from_pretrained(cls, model_path: str, *, map_location: str | torch.device = "cpu") -> "AudioLLMDualAudioTokensModel":
         """Load a pretrained AudioLLMDualAudioTokensModel."""
         import os
-        from auden.auto.auto_config import AutoConfig
+        import json
         from transformers import AutoTokenizer as HFTokenizer
         from transformers import AutoModelForCausalLM
         from safetensors.torch import load_file as safe_load_file
+        from model_config import AudioLLMDualAudioTokensConfig, AudioLLMDualAudioTokensAnchorNumConfig
+        
+        # Support loading from HuggingFace Hub
+        if not os.path.exists(model_path):
+            from auden.auto.auto_model import AutoModel
+            model_path = AutoModel._download_from_hub(model_path)
         
         # Handle different model path formats
         if model_path.endswith(('.pt', '.safetensors')):
@@ -545,8 +555,18 @@ class AudioLLMDualAudioTokensModel(LalmModel):
                 model_dir, _ = os.path.split(model_path)
                 weight_path = model_path
         
-        # Build config & tokenizer from model directory
-        config = AutoConfig.from_pretrained(model_dir)
+        # Load config from JSON directly (avoid AutoConfig which doesn't recognize this model_type)
+        config_path = os.path.join(model_dir, "config.json")
+        with open(config_path, "r") as f:
+            config_dict = json.load(f)
+        
+        # Determine which config class to use based on model_type
+        model_type = config_dict.get("model_type", "audio-llm-dual-audio-tokens")
+        if model_type == "audio-llm-dual-audio-tokens-anchor-num":
+            config = AudioLLMDualAudioTokensAnchorNumConfig(**config_dict)
+        else:
+            config = AudioLLMDualAudioTokensConfig(**config_dict)
+        
         tokenizer = HFTokenizer.from_pretrained(model_dir, use_fast=False)
         
         # Create model
@@ -571,6 +591,33 @@ class AudioLLMDualAudioTokensModel(LalmModel):
             
             # Load state dict
             missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
+
+        # Load projectors from projectors.pt (contains semantic_projector and voice_projector)
+        projectors_path = os.path.join(model_dir, "projectors.pt")
+        if os.path.exists(projectors_path):
+            logging.info(f"[AudioLLMDualAudioTokensModel] Loading projectors from {projectors_path}")
+            projector_state = torch.load(projectors_path, map_location=map_location)
+            
+            # Handle different checkpoint formats
+            if isinstance(projector_state, dict) and "state_dict" in projector_state:
+                projector_state = projector_state["state_dict"]
+            elif isinstance(projector_state, dict) and "model" in projector_state:
+                projector_state = projector_state["model"]
+            
+            # Extract semantic_projector and voice_projector weights
+            semantic_state = {k.replace('semantic_projector.', ''): v 
+                            for k, v in projector_state.items() 
+                            if k.startswith('semantic_projector.')}
+            voice_state = {k.replace('voice_projector.', ''): v 
+                          for k, v in projector_state.items() 
+                          if k.startswith('voice_projector.')}
+            
+            if semantic_state:
+                model.semantic_projector.load_state_dict(semantic_state, strict=True)
+                logging.info(f"[AudioLLMDualAudioTokensModel] Loaded semantic_projector")
+            if voice_state:
+                model.voice_projector.load_state_dict(voice_state, strict=True)
+                logging.info(f"[AudioLLMDualAudioTokensModel] Loaded voice_projector")
 
         # Load audio_encoder from subdirectory (if excluded from checkpoint)
         audio_encoder_path = os.path.join(model_dir, "audio_encoder")
@@ -775,4 +822,8 @@ class AudioLLMDualAudioTokensAnchorNumModel(AudioLLMDualAudioTokensModel):
         )
 
         return semantic_features, voice_features, semantic_lens, voice_lens
+
+
+# Convenient alias for easier imports
+TagSpeech = AudioLLMDualAudioTokensAnchorNumModel
 
