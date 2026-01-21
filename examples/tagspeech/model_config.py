@@ -2,16 +2,17 @@ from __future__ import annotations
 
 import os
 
-from auden.models.lalm.model_config import LalmConfig
-from auden.models.base.model_config import BaseConfig
-from auden.auto.auto_config import AutoConfig
 from transformers import AutoConfig as HFConfig
 from transformers import PretrainedConfig
 
+from auden.auto.auto_config import AutoConfig
+from auden.models.base.model_config import BaseConfig
+from auden.models.lalm.model_config import LalmConfig
 
-class AudioLLMDualAudioTokensConfig(LalmConfig):
+
+class TagSpeechBaseConfig(LalmConfig):
     """Configuration for AudioLLM with dual audio tokens and separate projectors.
-    
+
     Architecture:
         Audio Input
             ↓
@@ -36,9 +37,9 @@ class AudioLLMDualAudioTokensConfig(LalmConfig):
                     │
                   LLM
     """
-    
-    model_type: str = "audio-llm-dual-audio-tokens"
-    
+
+    model_type: str = "tagspeech-base"
+
     def __init__(
         self,
         *,
@@ -48,26 +49,26 @@ class AudioLLMDualAudioTokensConfig(LalmConfig):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        
+
         # Voice encoder config
         if voice_encoder_config is None:
             voice_encoder_config = self.audio_encoder_config
         self.voice_encoder_config = voice_encoder_config
-        
+
         # Dual projector downsampling rates
         self.semantic_projector_ds_rate = semantic_projector_ds_rate
         self.voice_projector_ds_rate = voice_projector_ds_rate
 
 
-class AudioLLMDualAudioTokensAnchorNumConfig(AudioLLMDualAudioTokensConfig):
+class TagSpeechConfig(TagSpeechBaseConfig):
     """Dual-audio-tokens model that inserts numeric anchors derived from digit embeddings.
 
-    Similar to the anchor_text model, but anchors consist of character embeddings from natural number 
-    sequences (1, 2, 3, ...), ensuring that semantic/voice branches insert the same numbered anchors 
+    Similar to the anchor_text model, but anchors consist of character embeddings from natural number
+    sequences (1, 2, 3, ...), ensuring that semantic/voice branches insert the same numbered anchors
     at the same real-time positions for precise time alignment.
     """
 
-    model_type: str = "audio-llm-dual-audio-tokens-anchor-num"
+    model_type: str = "tagspeech"
 
     def __init__(
         self,
@@ -75,7 +76,6 @@ class AudioLLMDualAudioTokensAnchorNumConfig(AudioLLMDualAudioTokensConfig):
         semantic_anchor_interval: int = 8,
         voice_anchor_interval: int = 8,
         insert_anchors_at_ends: bool = True,
-        digit_embedding_path: str = "utils/digit_token_embeddings.pt",
         semantic_projector_ds_rate: int = 4,
         voice_projector_ds_rate: int = 4,
         **kwargs,
@@ -89,7 +89,6 @@ class AudioLLMDualAudioTokensAnchorNumConfig(AudioLLMDualAudioTokensConfig):
         self.semantic_anchor_interval = int(semantic_anchor_interval)
         self.voice_anchor_interval = int(voice_anchor_interval)
         self.insert_anchors_at_ends = bool(insert_anchors_at_ends)
-        self.digit_embedding_path = str(digit_embedding_path)
 
         if self.semantic_anchor_interval <= 0 or self.voice_anchor_interval <= 0:
             raise ValueError(
@@ -99,7 +98,9 @@ class AudioLLMDualAudioTokensAnchorNumConfig(AudioLLMDualAudioTokensConfig):
 
         # Require the two branches to share the same real-time spacing:
         # projector_ds_rate * anchor_interval (measured on encoder frames) should match.
-        semantic_stride = self.semantic_anchor_interval * self.semantic_projector_ds_rate
+        semantic_stride = (
+            self.semantic_anchor_interval * self.semantic_projector_ds_rate
+        )
         voice_stride = self.voice_anchor_interval * self.voice_projector_ds_rate
         if semantic_stride != voice_stride:
             raise ValueError(
@@ -108,17 +109,3 @@ class AudioLLMDualAudioTokensAnchorNumConfig(AudioLLMDualAudioTokensConfig):
                 f"Got semantic: {self.semantic_anchor_interval} * {self.semantic_projector_ds_rate} = {semantic_stride}, "
                 f"voice: {self.voice_anchor_interval} * {self.voice_projector_ds_rate} = {voice_stride}"
             )
-
-        if not os.path.isabs(self.digit_embedding_path):
-            # Try to resolve relative path from current directory
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            candidate = os.path.join(current_dir, self.digit_embedding_path)
-            if os.path.exists(candidate):
-                self.digit_embedding_path = candidate
-
-        if not os.path.exists(self.digit_embedding_path):
-            raise FileNotFoundError(
-                f"digit_embedding_path not found: {self.digit_embedding_path}. "
-                f"Please run the digit anchor embedding precomputation script or update the path in config."
-            )
-

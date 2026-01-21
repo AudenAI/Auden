@@ -1,24 +1,24 @@
-exp_dir: experiments/audio_llm_dual_audio_tokens_anchor_num
+exp_dir: experiments/tagspeech
 hydra:
   run:
     dir: ${exp_dir}/logs/${now:%Y-%m-%d}/${now:%H-%M-%S}
 
 model:
-  model_type: audio-llm-dual-audio-tokens-anchor-num
+  model_type: tagspeech
 
   audio_encoder:
     model_type: zipformer
-    pretrained_model: /zipformer-encoder-zh-en # folder to loacl model
+    pretrained_model: /zipformer-encoder-zh-en # folder to local model or Hugging Face model name
     frozen: True
 
   voice_encoder:
     model_type: zipformer
-    pretrained_model: /speaker_encoder # folder to loacl model
+    pretrained_model: /speaker_encoder # folder to local model or Hugging Face model name
     frozen: True
 
   llm:
     model_type: qwen2
-    pretrained_model: /Qwen2.5-7B-Instruct # folder to loacl model
+    pretrained_model: /Qwen2.5-7B-Instruct # folder to local model or Hugging Face model name
     use_flash_attn: False
     frozen: True
 

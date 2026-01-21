@@ -39,11 +39,11 @@ pip install meeteval scipy
 
 ```python
 import torch
-from model import TagSpeech
+from model import TagSpeechModel
 from utils.xml_utils import xml_to_json
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-model = TagSpeech.from_pretrained("AudenAI/TagSpeech-AMI").to(device) # use "AudenAI/TagSpeech-Alimeeting" for Mandarin data
+model = TagSpeechModel.from_pretrained("AudenAI/TagSpeech-AMI").to(device) # use "AudenAI/TagSpeech-Alimeeting" for Mandarin data
 
 wav_files = ["assets/test_example_AMI_EN2002c-12-0-35.wav"]
 
@@ -75,10 +75,10 @@ Before training, generate numeric anchor embeddings from a pretrained LLM:
 ```bash
 python utils/generate_anchor_embeddings.py \
     --model_path /path/to/Qwen2.5-7B-Instruct \
-    --output_path utils/digit_token_embeddings.pt
+    --output_path utils/digit_embeddings.pt
 ```
 
-This creates `digit_token_embeddings.pt` which is required for training.
+This creates `digit_embeddings.pt` which is required for training.
 
 ### Step 2: Training
 
