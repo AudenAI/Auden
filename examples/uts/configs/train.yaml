@@ -1,0 +1,58 @@
+exp_dir:
+hydra:
+  run:
+    dir: ${exp_dir}/logs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+
+model:
+  model_type: audio-tag # check auto.model_registry.py to see all available models
+  encoder: zipformer # path or name for AutoConfig
+  id2label_json: /path/to/label.json
+  loss: ce # ce or bce
+
+trainer:
+  optimizer: 
+    type: scaled_adam
+    lr: 0.045
+  scheduler: 
+    type: eden
+    lr_epochs: 3.5 # Number of epochs that affects how rapidly the learning rate decreases.
+    lr_batches: 7500 # Number of steps that affects how rapidly the learning rate decreases. We suggest not to change this.
+    warmup_batches: 500 # lr warmup steps
+    lr_steps_per_epoch: 0 # recommend to adjust this value when you do use_infinite_dataset=True to get exact learning rate schedule as usual. Set it close to your estimated number of steps per epoch
+  start_epoch: 1
+  num_epochs: 30 # maximum epochs to stop
+  start_batch: 0
+  num_steps: 300000 # maximum total steps to stop
+  keep_last_k: 30 # save last_k checkpoints on disk
+  use_averaged_model: True
+  log_interval: 50
+  average_period: 200 # how rapidly the averaged_model is averaged and saved
+  reset_interval: 200 # moving average interval for info tracker
+  valid_interval: 1000
+  save_every_n: 4 # save checkpoint every (n * valid_interval) steps
+  use_fp16: False
+  tensorboard: True
+
+data:
+  train_data_config: configs/data_configs/train_data_config.yaml
+  valid_data_config: configs/data_configs/valid_data_config.yaml
+  on_the_fly_feats: True
+  sampling_rate: 16000
+  num_workers: 8
+  pad_to_30s: False
+  use_infinite_dataset: True
+  data_augmentation:
+    enable_spec_aug: True
+    enable_musan: False
+    musan: your_path_to_musan_cuts.jsonl.gz
+    enable_speed_perturb: False
+  # REQUIRED: field name where tags are stored, e.g., supervision.custom.audio_tag
+  label_field: audio_tag
+  sampler:
+    type: bucketing_sampler
+    num_buckets: 30
+    max_duration: 600
+    shuffle: True
+    drop_last: True
+
+

@@ -1,0 +1,7 @@
+# List of validation manifests
+
+- name: dev
+  manifest: /abs/path/to/dev_cuts.jsonl.gz
+
+- name: dev2
+  manifest: /abs/path/to/dev_cuts2.jsonl.gz

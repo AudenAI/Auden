@@ -1,0 +1,6 @@
+# List of training manifests with sampling weights
+# Download from UTS huggingface repo
+
+- manifest: /abs/path/to/captionstew400k_full_tag_2k.jsonl.gz
+  hours: 
+  weights: 1

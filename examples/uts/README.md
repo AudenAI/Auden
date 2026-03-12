@@ -3,7 +3,7 @@
 [![Model Alimeeting](https://img.shields.io/badge/%F0%9F%A4%97%20HuggingFace-UTS-yellow)](https://huggingface.co/datasets/eureka1500/UTS)
 
 <p>
-  <img src="assets/pipeline.png" width="60%" />
+  <img src="assets/pipeline.png" width="80%" />
 </p>
 
 This example presents UTS, a new data-centric pipeline that leverages a high-fidelity captioner to create SOTA-quality captions and the first Unified Tag System (UTS) that bridges speech, music, and environmental sounds. 
