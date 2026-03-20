@@ -1,6 +1,3 @@
-'''Taked from examples/audio_tag/trainer.py
-'''
-
 import logging
 
 import torch
@@ -51,7 +48,6 @@ class AudioTagTrainer(BaseTrainer):
             return loss, info, logits
 
     def validate(self, epoch: int):
-        """Run the validation process."""
         self.model.eval()
         with torch.no_grad():
             for valid_name, valid_dl in zip(
@@ -101,3 +97,42 @@ class AudioTagTrainer(BaseTrainer):
                         )
 
         self.model.train()
+
+
+class AudioCaptionTrainer(BaseTrainer):
+    def _forward_one_batch(self, batch: dict, is_training: bool):
+        device = self.device
+        feature = batch["inputs"]
+        assert feature.ndim == 3
+        feature = feature.to(device)
+
+        supervisions = batch["supervisions"]
+        feature_lens = supervisions["num_frames"].to(device)
+        text = supervisions["caption"]
+        batch_size = len(text)
+
+        with torch.set_grad_enabled(is_training):
+            outputs = self.model(
+                x=feature,
+                x_lens=feature_lens,
+                text=text,
+                parallel_decoding_prob=(
+                    self.cfg.trainer.parallel_decoding_prob if is_training else 0.0
+                ),
+                max_length=self.cfg.trainer.max_length,
+                return_dict=True,
+            )
+            loss = outputs["loss"]
+
+        assert loss.requires_grad == is_training
+
+        info = MetricsTracker()
+        num_frames = (feature_lens // 4).sum().item()
+        info.set_value("frames", num_frames, normalization="sum")
+        info.set_value("samples", batch_size, normalization="sum")
+        info.set_value(
+            "caption_loss",
+            loss.detach().cpu().item(),
+            normalization="sample_avg",
+        )
+        return loss, info

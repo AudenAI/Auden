@@ -1,6 +1,6 @@
 # Unlocking Strong Supervision: A Data-Centric Study of General-Purpose Audio Pre-Training Methods
 
-[![Model Alimeeting](https://img.shields.io/badge/%F0%9F%A4%97%20HuggingFace-UTS-yellow)](https://huggingface.co/datasets/eureka1500/UTS)
+[![Model Alimeeting](https://img.shields.io/badge/%F0%9F%A4%97%20HuggingFace-UTS-yellow)](https://huggingface.co/datasets/AudenAI/UTS)
 
 <p>
   <img src="assets/pipeline.png" width="80%" />
@@ -73,12 +73,92 @@ This runs tag extraction (Qwen2.5-7B-Instruct), TF-IDF label system construction
 
 ## Data
 
-The dataset is available at a huggingface repo [eureka1500/UTS](https://huggingface.co/datasets/eureka1500/UTS). It contains ~361k training samples from [CaptionStew](https://arxiv.org/abs/2511.16757) 400K-subset, spanning speech, music, and environmental sounds.
+The dataset is available at a huggingface repo [AudenAI/UTS](https://huggingface.co/datasets/AudenAI/UTS). It contains ~361k training samples from [CaptionStew](https://arxiv.org/abs/2511.16757) 400K-subset, spanning speech, music, and environmental sounds.
 Each sample includes a high-fidelity caption and UTS tags constructed using the pipeline above. 
 
-The `cut.recording.sources[0].source` field stores the source dataset name (e.g., `audioset`) - replace this with your local audio path before training.
-
 The `configs/label` folder contains UTS vocabularies at five sizes (800 / 1k / 1.5k / 2k / 3k), selected by TF-IDF over all parsed tags.
+
+
+## Training
+
+### Data Configs
+
+Edit YAMLs under `configs/data_configs/` to point to your Lhotse CutSet `jsonl.gz` manifests (download from [AudenAI/UTS](https://huggingface.co/datasets/AudenAI/UTS)).
+
+Each manifest is a Lhotse `MonoCut` JSONL file. The training fields used by UTS are stored under `supervisions[0].custom`:
+- `audio_tag` — list of UTS tag strings (used by audio tagging)
+- `caption` — detailed audio caption string (used by audio captioning)
+- `original_caption` — original captions from source datasets (can be compared with `caption` to see the quality improvement)
+
+Below is a truncated example of a single manifest entry:
+
+```json
+{
+    "id": "YtS9FbMAKnFc",
+    "start": 0.0,
+    "duration": 10.0,
+    "channel": 0,
+    "supervisions": [{
+        "id": "YtS9FbMAKnFc",
+        "recording_id": "YtS9FbMAKnFc",
+        "start": 0.0,
+        "duration": 10.0,
+        "channel": 0,
+        "custom": {
+            "audio_tag": ["punk", "music", "vehicle", "engine", "tire",
+                          "lo-fi", "mixing", "chaos", "urgency", "action"],
+            "original_caption": ["An electronic melody intertwines with ...",
+                                 "The audio is dominated by intense racing sounds"],
+            "caption": "The audio clip begins with a burst of high-energy, aggressive punk rock music ..."
+        }
+    }],
+    "recording": {
+        "id": "YtS9FbMAKnFc",
+        "sources": [{"type": "file", "channels": [0], "source": "audioset"}],
+        "sampling_rate": 16000,
+        "num_samples": 160000,
+        "duration": 10.0,
+        "channel_ids": [0]
+    },
+    "type": "MonoCut"
+}
+```
+
+> **Note:** The `recording.sources[0].source` field stores the source dataset name (e.g., `audioset`) — replace this with your local audio path before training.
+
+### Pre-training
+
+We support two pre-training objectives. Both use Zipformer as the audio encoder and are launched via `torchrun` with DDP.
+
+- `scripts/pretrain_mtc.sh`: Multi-label audio tagging with BCE loss and UTS labels.
+- `scripts/pretrain_caption.sh`: Autoregressive audio captioning with BART tokenizer.
+
+Example (audio tagging):
+
+```bash
+cd examples/uts
+torchrun --nproc_per_node=4 \
+    train.py \
+    exp_dir=exp/tag_pt \
+    model.id2label_json=configs/label/label_2k.json \
+    model.loss=bce \
+    data.train_data_config=configs/data_configs/train_data_config.yaml \
+    data.valid_data_config=configs/data_configs/valid_data_config.yaml \
+    data.sampler.max_duration=800
+```
+
+Example (audio captioning):
+
+```bash
+cd examples/uts
+torchrun --nproc_per_node=4 \
+    train.py \
+    --config-name train_caption \
+    exp_dir=exp/caption_pt \
+    data.train_data_config=configs/data_configs/train_data_config.yaml \
+    data.valid_data_config=configs/data_configs/valid_data_config.yaml \
+    data.sampler.max_duration=800
+```
 
 
 ## Citation

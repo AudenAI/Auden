@@ -46,8 +46,8 @@ data:
     enable_musan: False
     musan: your_path_to_musan_cuts.jsonl.gz
     enable_speed_perturb: False
-  # REQUIRED: field name where tags are stored, e.g., supervision.custom.audio_tag
-  label_field: audio_tag
+  tag_field: audio_tag
+  caption_field: caption
   sampler:
     type: bucketing_sampler
     num_buckets: 30

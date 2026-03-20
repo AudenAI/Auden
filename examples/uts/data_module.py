@@ -1,58 +1,41 @@
-"""
-Taked from examples/audio_tag/data_module.py
+"""UTS datamodule supporting both audio_tag and caption fields.
 
-Audio Tagging example datamodule built on BaseLhotseDatamodule.
-
-Provides train/valid DataLoaders for audio tagging tasks using Lhotse CutSets.
-Mirrors the ASR datamodule but emits tag strings as supervision labels.
+Provides train/valid DataLoaders for UTS pre-training using Lhotse CutSets.
+Each sample can carry both tags (for classification) and captions (for
+captioning/contrastive learning). Either field is optional per sample — a
+missing field is emitted as None so downstream trainers can decide which
+label(s) to use.
 
 Manifest expectations:
 - Each cut should contain exactly one supervision used for labeling. If multiple
   supervisions are present, this datamodule will keep only the first one.
-- Tags are read from a configurable supervision field `label_field` (default: "audio_tag").
-  The field may appear either under `supervision.custom[label_field]` or as
-  a direct attribute `supervision.<label_field>`.
-- Multi-label is supported: when the value is a list, it is joined with ';' to a single
-  semicolon-separated string. A single string value is used as-is. If a semicolon-joined
-  string is already stored (e.g., "Blues;Music"), it will be consumed as-is.
-- The resulting tag string(s) must match entries in `id2label.json` used by the model.
+- Tags are read from supervision field `tag_field` (default: "audio_tag").
+  Multi-label is supported: list values are joined with ';'.
+- Captions are read from supervision field `caption_field` (default: "caption").
+  If the field is a list, one caption is randomly chosen per sample.
+- Both fields are looked up under `supervision.custom[field]` first, then as
+  a direct attribute `supervision.<field>`.
 
-Example YAML for data configs (each entry is one dataset):
-    - name: "audioset_valid"
-      manifest: /abs/path/to/cuts.jsonl
-      hours: 100          # for logging/mixing
-      weights: 1          # optional, train-side repetition/mix weight
-
-Example MonoCut with embedded recording and supervision (multi-label under custom.audio_tag):
+Example MonoCut with both fields:
     {
         "id": "cut-0001",
-        "start": 0.0,
-        "duration": 3.2,
-        "recording_id": "rec-0001",
-        "recording": {
-            "id": "rec-0001",
-            "sources": [
-                {"type": "file", "channels": [0], "source": "/abs/path/to/audio.wav"}
-            ],
-            "sampling_rate": 16000,
-            "num_samples": 51200,
-            "duration": 3.2,
-            "channel_ids": [0]
-        },
+        ...
         "supervisions": [
             {
                 "id": "utt-0001",
-                "recording_id": "rec-0001",
-                "start": 0.0,
-                "duration": 3.2,
-                "channel": 0,
-                "custom": {"audio_tag": ["Blues", "Music"]}
+                ...
+                "custom": {
+                    "audio_tag": ["Blues", "Music"],
+                    "caption": "A blues guitar riff with bass accompaniment."
+                }
             }
         ]
     }
 """
 
 import logging
+import random
+from re import sub
 
 import torch
 import yaml
@@ -64,12 +47,22 @@ from torch.utils.data import DataLoader
 from auden.data.lhotse_datamodule import BaseLhotseDatamodule, _SeedWorkers
 
 
-class AudioTagDataset(torch.utils.data.Dataset):
-    """Wraps a CutSet and emits (features, num_frames, tag_string).
+def _get_supervision_field(supervision, field_name):
+    """Read a field from a Lhotse supervision, checking custom dict first."""
+    val = None
+    if hasattr(supervision, "custom") and isinstance(supervision.custom, dict):
+        val = supervision.custom.get(field_name, None)
+    if val is None and hasattr(supervision, field_name):
+        val = getattr(supervision, field_name)
+    return val
 
-    Reads label text from a configurable supervision field `label_field` when available,
-    falling back to the standard `text` field. If the field contains a list, it is
-    joined with ';' to form a semicolon-separated tag string.
+
+class UTSDataset(torch.utils.data.Dataset):
+    """Wraps a CutSet and emits features with both tags and captions.
+
+    For each cut the batch contains:
+      - supervisions["tags"]: semicolon-joined tag string, or None if absent
+      - supervisions["caption"]: preprocessed caption string, or None if absent
     """
 
     def __init__(
@@ -78,67 +71,76 @@ class AudioTagDataset(torch.utils.data.Dataset):
         cut_transforms=None,
         input_transforms=None,
         return_cuts=False,
-        label_field: str = "audio_tag",
+        tag_field: str = "audio_tag",
+        caption_field: str = "caption",
     ):
         self.input_strategy = input_strategy
         self.cut_transforms = cut_transforms
         self.input_transforms = input_transforms
         self.return_cuts = return_cuts
-        self.label_field = label_field
-        # Workaround for HDF5 memory growth when using precomputed features
+        self.tag_field = tag_field
+        self.caption_field = caption_field
         self.hdf5_fix = Hdf5MemoryIssueFix(reset_interval=100)
 
+    @staticmethod
+    def _text_preprocess(sentence):
+        """Lowercase and strip punctuation, matching CLAP/audio_caption convention."""
+        sentence = sentence.lower()
+        sentence = sub(r'\s([,.!?;:"](?:\s|$))', r"\1", sentence).replace("  ", " ")
+        sentence = sub('[(,.!?;:|*")]', " ", sentence).replace("  ", " ")
+        return sentence
+
+    def _get_tag_str(self, cut):
+        sup = cut.supervisions[0]
+        label_val = _get_supervision_field(sup, self.tag_field)
+        if label_val is None:
+            return None
+        if isinstance(label_val, (list, tuple)):
+            return ";".join(map(str, label_val))
+        return str(label_val)
+
+    def _get_caption_str(self, cut):
+        sup = cut.supervisions[0]
+        cap_val = _get_supervision_field(sup, self.caption_field)
+        if cap_val is None:
+            return None
+        if isinstance(cap_val, (list, tuple)):
+            chosen = random.choice(cap_val) if len(cap_val) > 0 else ""
+            return self._text_preprocess(str(chosen))
+        return self._text_preprocess(str(cap_val))
+
     def __getitem__(self, cuts):
-        # Periodically close HDF5 handles to avoid memory growth
         self.hdf5_fix.update()
-        # Sort by duration so the first determines batch dims
         cuts = cuts.sort_by_duration(ascending=False)
 
-        # Optional CutSet transforms (e.g., speed perturb, padding)
         if self.cut_transforms is not None:
             for tnfm in self.cut_transforms:
                 cuts = tnfm(cuts)
 
-        # Sort again after transforms
         cuts = cuts.sort_by_duration(ascending=False)
 
-        # Convert cuts to inputs via the input strategy
         input_tpl = self.input_strategy(cuts)
         if len(input_tpl) == 3:
             features, _, cuts = input_tpl
         else:
             features, _ = input_tpl
 
-        # Supervision intervals (sequence_idx/start/num frames or samples)
         supervision_intervals = self.input_strategy.supervision_intervals(cuts)
 
-        # Apply input transforms if any
         if self.input_transforms is not None:
             for tnfm in self.input_transforms:
                 features = tnfm(features)
 
-        # Expect a single supervision with a tag string strictly from label_field
-        def _get_label_str(cut):
-            sup = cut.supervisions[0]
-            label_val = None
-            if hasattr(sup, "custom") and isinstance(sup.custom, dict):
-                label_val = sup.custom.get(self.label_field, None)
-            if label_val is None and hasattr(sup, self.label_field):
-                label_val = getattr(sup, self.label_field)
-            if label_val is None:
-                raise ValueError(
-                    f"Missing label_field '{self.label_field}' in supervision (custom or attribute)."
-                )
-            if isinstance(label_val, (list, tuple)):
-                return ";".join(map(str, label_val))
-            return str(label_val)
+        tags = [self._get_tag_str(c) for c in cuts]
+        captions = [self._get_caption_str(c) for c in cuts]
 
-        tags = [_get_label_str(c) for c in cuts]
         batch = {
             "inputs": features,
-            "supervisions": {"tags": tags},
+            "supervisions": {
+                "tags": tags,
+                "caption": captions,
+            },
         }
-        # Merge supervision intervals into supervisions (includes num_frames/samples)
         batch["supervisions"].update(supervision_intervals)
         if self.return_cuts:
             batch["supervisions"]["cut"] = [
@@ -150,12 +152,11 @@ class AudioTagDataset(torch.utils.data.Dataset):
         return 0  # unused with bucketing samplers
 
 
-class AudioTagDatamodule(BaseLhotseDatamodule):
+class UTSDatamodule(BaseLhotseDatamodule):
     def __init__(self, cfg):
         super().__init__(cfg)
 
     def _filter_cutset(self, cutset, split="train"):
-        # Example placeholder: keep 1s..60s and ensure single supervision
         def keep(c):
             if c.duration < 1.0 or c.duration > 60.0:
                 return False
@@ -189,19 +190,23 @@ class AudioTagDatamodule(BaseLhotseDatamodule):
             return CutSet.mux(*cutset_list, weights=cutset_hours, stop_early=True)
         return cutset_list[0]
 
+    def _make_dataset(self):
+        return UTSDataset(
+            input_strategy=self.input_strategy,
+            cut_transforms=self.transforms,
+            input_transforms=self.input_transforms,
+            return_cuts=True,
+            tag_field=self.cfg.get("tag_field", "audio_tag"),
+            caption_field=self.cfg.get("caption_field", "caption"),
+        )
+
     def setup_train(self):
         with open(self.cfg.train_data_config, "r") as f:
             cfg_list = yaml.load(f, Loader=yaml.FullLoader)
         cutset = self._build_mux_cutset(cfg_list)
         cutset = self._filter_cutset(cutset, split="train")
         sampler = self._build_train_sampler(cutset)
-        dataset = AudioTagDataset(
-            input_strategy=self.input_strategy,
-            cut_transforms=self.transforms,
-            input_transforms=self.input_transforms,
-            return_cuts=True,
-            label_field=self.cfg.get("label_field", "audio_tag"),
-        )
+        dataset = self._make_dataset()
         seed = torch.randint(0, 100000, ()).item()
         worker_init_fn = _SeedWorkers(seed)
         self.train_dl = DataLoader(
@@ -221,10 +226,11 @@ class AudioTagDatamodule(BaseLhotseDatamodule):
         for spec in cfg_list:
             cutset = CutSet.from_file(spec["manifest"]).resample(self.sampling_rate)
             cutset = self._filter_cutset(cutset, split="valid")
-            dataset = AudioTagDataset(
+            dataset = UTSDataset(
                 input_strategy=self.input_strategy,
                 return_cuts=True,
-                label_field=self.cfg.get("label_field", "audio_tag"),
+                tag_field=self.cfg.get("tag_field", "audio_tag"),
+                caption_field=self.cfg.get("caption_field", "caption"),
             )
             sampler = DynamicBucketingSampler(
                 cutset, max_duration=self.cfg.sampler.max_duration, shuffle=False
