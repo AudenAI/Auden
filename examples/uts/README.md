@@ -1,5 +1,6 @@
 # Unlocking Strong Supervision: A Data-Centric Study of General-Purpose Audio Pre-Training Methods
 
+[![arXiv](https://img.shields.io/badge/arXiv-2603.25767-b31b1b.svg)](https://arxiv.org/abs/2603.25767)
 [![Model Alimeeting](https://img.shields.io/badge/%F0%9F%A4%97%20HuggingFace-UTS-yellow)](https://huggingface.co/datasets/AudenAI/UTS)
 
 <p>
