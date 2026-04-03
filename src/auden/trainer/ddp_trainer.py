@@ -88,7 +88,18 @@ class BaseTrainer(ABC):
         self.local_rank = local_rank
         self.world_size = world_size
         self.device = torch.device("cuda", local_rank)
-        self.use_fp16 = cfg.trainer.use_fp16
+        mixed_precision = None
+        if "mixed_precision" in cfg.trainer and cfg.trainer.mixed_precision is not None:
+            mixed_precision = str(cfg.trainer.mixed_precision).lower()
+        elif "use_fp16" in cfg.trainer:  # deprecated, for backward compatibility
+            mixed_precision = "fp16" if bool(cfg.trainer.use_fp16) else None
+
+        if mixed_precision not in (None, "fp16", "bf16"):
+            raise ValueError(
+                f"Invalid mixed_precision: {mixed_precision}. "
+                "Expected one of: None, 'fp16', 'bf16'."
+            )
+        self.mixed_precision = mixed_precision
         self.global_step = cfg.trainer.start_batch
         self.tb_writer = None
         if self.rank == 0 and cfg.trainer.tensorboard:
@@ -101,7 +112,9 @@ class BaseTrainer(ABC):
         self.model, self.model_avg = self.setup_model(model)
 
         # optimizer and scheduler
-        self.scaler = torch.amp.GradScaler("cuda", enabled=self.use_fp16)
+        self.scaler = torch.amp.GradScaler(
+            "cuda", enabled=self.mixed_precision == "fp16"
+        )
         self.optimizer = self.build_optimizer(self.model)
         self.scheduler = self.build_scheduler(self.optimizer)
 
@@ -280,6 +293,13 @@ class BaseTrainer(ABC):
 
             def get_last_lr(self):
                 return self._last_lr
+
+            def state_dict(self):
+                return self._sch.state_dict()
+
+            def load_state_dict(self, state_dict):
+                self._sch.load_state_dict(state_dict)
+                self._last_lr = [g["lr"] for g in self._sch.optimizer.param_groups]
 
             def step_batch(self, batch: int | None = None):
                 if self._update_on == "batch":
@@ -483,7 +503,14 @@ class BaseTrainer(ABC):
                 batch_idx = self.global_step
 
             self.global_step += 1
-            batch_size = batch["inputs"].size(0)
+            if "batch_size" in batch:
+                batch_size = batch["batch_size"]
+            elif "inputs" in batch:
+                batch_size = batch["inputs"].size(0)
+            else:
+                raise ValueError(
+                    f"Batch does not contain 'inputs' or 'features': {batch}"
+                )
 
             loss, batch_metrics = self._forward_backward_optimize(batch)
 
@@ -663,7 +690,16 @@ class BaseTrainer(ABC):
             This method uses automatic mixed precision when self.use_fp16 is True.
             The gradient scaler is used to prevent gradient underflow in FP16 training.
         """
-        with torch.amp.autocast("cuda", enabled=self.use_fp16):
+        amp_dtype = (
+            torch.float16
+            if self.mixed_precision == "fp16"
+            else torch.bfloat16 if self.mixed_precision == "bf16" else None
+        )
+        with torch.amp.autocast(
+            "cuda",
+            enabled=self.mixed_precision is not None,
+            dtype=amp_dtype,
+        ):
             loss, batch_metrics = self._forward_one_batch(batch=batch, is_training=True)
 
         # Backprop and optimization step
@@ -768,7 +804,7 @@ class BaseTrainer(ABC):
             If the scale becomes extremely small (< 1e-5), training will be terminated
             as this indicates severe numerical instability.
         """
-        if not self.use_fp16 or batch_idx % 100 != 0:
+        if self.mixed_precision != "fp16" or batch_idx % 100 != 0:
             return
 
         cur_scale = self.scaler.get_scale()
@@ -809,19 +845,20 @@ class BaseTrainer(ABC):
             return
 
         cur_lr = max(self.scheduler.get_last_lr())
-        cur_grad_scale = self.scaler.get_scale() if self.use_fp16 else 1.0
+        use_fp16 = self.mixed_precision == "fp16"
+        cur_grad_scale = self.scaler.get_scale() if use_fp16 else 1.0
 
         logging.info(
             f"Epoch {epoch}, "
             f"batch {batch_idx}, info[{batch_metrics}], "
             f"tot_info[{total_metrics}], batch size: {batch_size}, "
             f"lr: {cur_lr:.2e}, "
-            + (f"grad_scale: {cur_grad_scale}" if self.use_fp16 else "")
+            + (f"grad_scale: {cur_grad_scale}" if use_fp16 else "")
         )
 
         if self.tb_writer is not None:
             self.tb_writer.add_scalar("train/learning_rate", cur_lr, self.global_step)
-            if self.use_fp16:
+            if use_fp16:
                 self.tb_writer.add_scalar(
                     "train/grad_scale", cur_grad_scale, self.global_step
                 )

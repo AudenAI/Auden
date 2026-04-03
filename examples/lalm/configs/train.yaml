@@ -1,0 +1,79 @@
+exp_dir:
+
+hydra:
+  run:
+    dir: ${exp_dir}/logs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+
+seed: 114514
+
+model:
+  # Path to checkpoint assembled by examples/lalm/build_model.py
+  pretrained_model:
+
+trainer:
+  optimizer:
+    type: adamw
+    lr: 1.0e-3
+    weight_decay: 0.0
+    betas: [0.9, 0.95]
+    eps: 1.0e-8
+    fused: true
+
+  scheduler:
+    type: cosine
+    t_max: 10
+    eta_min: 0.0
+
+  num_epochs: 10
+  start_epoch: 1
+  num_steps: 500000
+  start_batch: 0
+
+  mixed_precision: fp16
+  frozen_modules: [audio_tower, language_model]
+
+  use_averaged_model: true
+  average_period: 100
+  ema_decay: 0.9999
+
+  grad_accum_steps: 1
+  max_grad_norm: 1.0
+
+  valid_interval: 1000
+  save_every_n: 4
+  keep_last_k: 5
+
+  log_interval: 50
+  reset_interval: 200
+  tensorboard: true
+  find_unused_parameters: false
+
+data:
+  # YAML files listing manifests.
+  train_data_config: configs/train_data_config.yaml
+  valid_data_config: configs/valid_data_config.yaml
+
+  on_the_fly_feats: true
+  sampling_rate: 16000
+  feature: whisper_v3_fbank
+  fault_tolerant: false
+  audio_token_rate: 12.5
+
+  min_duration: 0.5
+  max_duration: 30.0
+
+  data_augmentation:
+    enable_spec_aug: true
+    enable_musan: false
+    enable_speed_perturb: false
+    musan:
+
+  sampler:
+    num_buckets: 30
+    max_tokens: 600
+    max_duration:
+    shuffle: true
+    drop_last: true
+
+  num_workers: 8
+  use_infinite_dataset: true

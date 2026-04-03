@@ -1,0 +1,2 @@
+- name: aishell
+  manifest: data/test/aishell_test_conversation.jsonl.gz

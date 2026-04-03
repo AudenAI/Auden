@@ -1,0 +1,8 @@
+# - hours: 1000
+#   manifest: /apdcephfs_cq12/share_302080740/data/asr_train_data/manifests/chinese/open_source/aishell2/aishell2_cuts.jsonl.gz
+#   weights: 1
+#   source: patch
+- hours: 150
+  manifest: data/train/aishell1_cuts_conversation.jsonl.gz
+  weights: 1
+  source: patch

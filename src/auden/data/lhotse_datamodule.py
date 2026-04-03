@@ -113,21 +113,26 @@ class BaseLhotseDatamodule(ABC):
             feature_type = self.cfg.get("feature", "fbank")
             if feature_type == "fbank":
                 self.input_strategy = OnTheFlyFeatures(
-                    Fbank(FbankConfig(num_mel_bins=80))
+                    Fbank(FbankConfig(num_mel_bins=80)),
+                    fault_tolerant=self.cfg.get("fault_tolerant", False),
                 )
                 logging.info("Using default kaldi-fbank")
             elif feature_type == "whisper_fbank":
                 self.input_strategy = OnTheFlyFeatures(
-                    WhisperFbank(WhisperFbankConfig(num_filters=80))
+                    WhisperFbank(WhisperFbankConfig(num_filters=80)),
+                    fault_tolerant=self.cfg.get("fault_tolerant", False),
                 )
                 logging.info("Using Whisper fbank (80 dims)")
             elif feature_type == "whisper_v3_fbank":
                 self.input_strategy = OnTheFlyFeatures(
-                    WhisperFbank(WhisperFbankConfig(num_filters=128))
+                    WhisperFbank(WhisperFbankConfig(num_filters=128)),
+                    fault_tolerant=self.cfg.get("fault_tolerant", False),
                 )
                 logging.info("Using Whisper v3 fbank (128 dims)")
             elif feature_type == "wav":
-                self.input_strategy = AudioSamples()
+                self.input_strategy = AudioSamples(
+                    fault_tolerant=self.cfg.get("fault_tolerant", False)
+                )
                 logging.info("Using raw waveform")
         else:
             self.input_strategy = PrecomputedFeatures()
@@ -277,7 +282,7 @@ class BaseLhotseDatamodule(ABC):
             train_sampler = DynamicBucketingSampler(
                 train_cutset,
                 max_duration=self.cfg.sampler.max_duration,
-                max_cuts=getattr(self.cfg.sampler, 'max_cuts', None),
+                max_cuts=getattr(self.cfg.sampler, "max_cuts", None),
                 shuffle=self.cfg.sampler.shuffle,
                 num_buckets=self.cfg.sampler.num_buckets,
                 buffer_size=self.cfg.sampler.num_buckets * 2000,

@@ -1,0 +1,30 @@
+exp_dir:
+
+checkpoint:
+  # [Checkpoint Loading Priority]
+  # 1. If 'model_dir' exists and has weights, use it directly (from_pretrained).
+  # 2. Else if 'filename' is set, export from {exp_dir}/{filename}.
+  # 3. Else if 'iter' > 0, export from {exp_dir}/checkpoint-{iter}.pt.
+  # 4. Else if 'epoch' > 0, export from {exp_dir}/epoch-{epoch}.pt.
+  # Exported weights are cached in {exp_dir}/export/{suffix}/ for reuse.
+  model_dir:          # e.g., "/path/to/exported_model" (skip export if set)
+  filename:           # e.g., "checkpoint-5000.pt"
+  iter: 0             # e.g., 5000
+  epoch: 0            # e.g., 3
+
+# "greedy_search" or "beam_search"
+decoding_method: greedy_search
+num_beams: 4          # used only when decoding_method=beam_search
+max_new_tokens: 200
+
+# Mixed precision for inference: fp16, bf16, or fp32
+dtype: fp16
+
+data:
+  test_data_config: configs/valid_data_config.yaml
+  max_duration: 1000
+  num_workers: 4
+  sampling_rate: 16000
+  # Feature extraction settings (should match training)
+  on_the_fly_feats: true
+  feature: whisper_v3_fbank
