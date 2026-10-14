@@ -1,0 +1,10 @@
+backbone: so30b
+variant: so
+repo_id: dieKarotte/Spatial-Omni
+revision: 6b06cb3611370b27ac93890929d1c7c73f6e3d4a
+device: cuda:0
+dtype: bfloat16
+attn_impl: sdpa
+max_new_tokens: 96
+seed: 1234
+base_revision: 26291f793822fb6be9555850f06dfe95f2d7e695

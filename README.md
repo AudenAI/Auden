@@ -116,6 +116,8 @@ config = AutoConfig.for_model("zipformer", hidden_size=512)
 
 Check [examples/](examples/) for task-specific tutorials.
 
+- [Spatial-Omni](examples/spatial_omni/): SO-7B and SO-30B for spatial audio question answering.
+
 ## License
 The code and weights in this repository are released under the [LICENSE](LICENSE) file.
 This repository also includes a [NOTICE](NOTICE) file with third-party attributions (e.g., Transformers, Icefall).
